@@ -16,7 +16,7 @@ import urllib
 
 
 ###################################################################
-### Spatial dash daily task stored in S3 /automation_resources/queue_etl/spatial_dash_daily_task.zip
+### Spatial dash daily task stored in S3 /$$$$$$$$$$$$$$$$$$$$$$.zip
 ### Scheduled task pulls in script and runs it to populate server with mapservice
 ###################################################################
 
