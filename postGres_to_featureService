@@ -51,8 +51,8 @@ def getToken(username, password, serverName, serverPort):
 
 
 def deleteservice(server, servicename, username, password, token=None, port=6080):
-    #url = "https://igsaws911f8be86.gs.doi.net/server/admin/services/requests_data.MapServer/delete"
-    url = "https://localhost/server/admin/services/$$$$$$$$$$$"
+    
+    url = "https://localhost/server/admin/services/$$$$$$$$$$$/delete"
     token = getToken( username, password, '$$$$$$$$$$$$$$$$.net', 443)
     values = {'token':token,
             'f':'json'}
