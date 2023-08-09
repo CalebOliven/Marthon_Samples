@@ -1,0 +1,162 @@
+import psycopg2
+from collections import Counter
+import datetime
+import time
+import operator
+import json
+import arcpy
+import os
+import re
+
+
+##File Description
+### The purpose of this file is to perform the etl operation required for the so-dubbed 'spatial metrics dashboard'. This dashboard will provide
+#valuable spatial insight into the delivery of TopoBuilder Products.
+### dev_etl.py performs the extraction from the ##### and ########## tables. It creates the output feature_class: #############; and the flat
+# tables ########### and #############.The file also creates a .sd file of these data and uploads to ARCSERVER.
+start = time.time()
+
+
+#### Function Definitions ####
+
+def ExtractData(pg_sql):
+    host_conn = "##################.gov"
+    database_conn = "#######"
+    username_conn = "#######"
+    password_conn = "###############"
+
+    pg_conn = psycopg2.connect(host=host_conn,database=database_conn,user=username_conn,password=password_conn)
+    pg_cursor = pg_conn.cursor()
+    pg_cursor.execute(pg_sql)
+    db_result = pg_cursor.fetchall()
+    pg_cursor.close()
+    pg_conn.close()
+    return db_result
+
+def WriteLog (msg):
+    print (msg)
+
+def create_table(environment):
+    select_sql = "SELECT map_id, order_id::text, email, map_type, cell_id, map_sheet_name, primary_state, export_format, contour_smoothing, layers_removed, product_json, aoi_geometry"
+    from_sql = "#####################" + str(environment)
+    all_data_sql = select_sql + " " + from_sql
+    all_data = ExtractData(all_data_sql)
+    request_list = []
+   
+    for i in all_data:
+        map_id = i[0] if i[0] else None
+        order_id = i[1] if i[1] else None        
+        user_email = i[2] if i[2] else None
+        map_type = i[3] if i[3] else None
+        cell_id = i[4] if i[4] else None
+        str_cell_id = cell_id
+        str_cell_id = str(str_cell_id)
+        if re.match("^-99", str_cell_id):
+            cell_id = None
+
+        if cell_id < 0:
+            extent = 'Off-Grid Extent'
+
+        if cell_id > 0:
+            extent = 'Standard Extent'
+
+        map_sheet_name = i[5] if i[5] else None
+        primary_state = i[6] if i[6] else None
+        export_format = i[7] if i[7] else None
+        if export_format == 'Production PDF':
+            export_format = 'Geospatial PDF'
+
+        contour_smoothing = i[8] if i[8] else None
+        aoi_geometry = i[11] if i[11] else None
+
+        if not i[9]:
+            layers_removed = None
+        else:
+            layers_removed = i[9]
+            string = ""
+            for i in range(len(layers_removed)):
+                if i == len(layers_removed) - 1:
+                    string += str(layers_removed[i])
+                else:
+                    string += str(layers_removed[i]) + ", "
+
+            layers_removed = string
+
+        sql_2 = 'SELECT map_id, job_started, job_completed, map_status FROM ################### where map_id = ' + "'" + map_id + "'"
+        date_data = ExtractData(sql_2)
+        
+        if not date_data:
+            submit_date = None
+            complete_date = None
+            status = None
+        else:
+            submit_date = date_data[0][1]
+            complete_date = date_data[0][2]
+            status = date_data[0][3]
+        
+        sql_3 = 'SELECT map_id, signed_url FROM dynamap.delivery_status_stage where map_id = ' + "'" + map_id + "'"
+        signed_data = ExtractData(sql_3)
+
+        if not signed_data:
+            signed_url = None
+        else:
+            signed_url = signed_data[0][1]
+
+        if status == 2:
+            signed_url = signed_url
+            url_expiration = complete_date + datetime.timedelta(days = 60)
+        if status != 2:
+            signed_url = None
+            url_expiration = None
+
+        boundingbox = aoi_geometry['rings'][0]        
+        arrayList = []
+        for coordpair in boundingbox:
+            arrayList.append(arcpy.Point(coordpair[0], coordpair[1]))
+        pointArray = arcpy.Array(arrayList)
+        polygon = arcpy.Polygon(pointArray)    
+        request_list.append([map_id, order_id, user_email, map_type, cell_id, map_sheet_name, primary_state, export_format, contour_smoothing, layers_removed, extent, submit_date, complete_date, status, signed_url, url_expiration, polygon])
+    return request_list
+
+request_list = create_table('stage')
+outDir = r"C:\##########"
+gdb_name = "###########.gdb"
+queuefc_name = '###########'
+queuefc = os.path.join(outDir, gdb_name, queuefc_name)
+
+
+if arcpy.Exists(os.path.join(outDir, gdb_name)):
+    arcpy.Delete_management(os.path.join(outDir, gdb_name))
+arcpy.CreateFileGDB_management(outDir, gdb_name)
+
+def perform_initial_table_create():
+    arcpy.CreateFeatureclass_management(os.path.join(outDir, gdb_name), queuefc_name, "Polygon", "", "", "", arcpy.SpatialReference(3857))
+    arcpy.AddField_management(queuefc, "map_id", "TEXT", "", "", 255) #on grid or off grid
+    arcpy.AddField_management(queuefc, "order_id", "TEXT") #on grid or off grid
+    arcpy.AddField_management(queuefc, "user_email", "TEXT", "", "", 150)
+    arcpy.AddField_management(queuefc, "map_type", "TEXT", "", "", 50)
+    arcpy.AddField_management(queuefc, "cell_id", "LONG", "", "", 10)
+    arcpy.AddField_management(queuefc, "map_sheet_name", "TEXT", "", "", 50)
+    arcpy.AddField_management(queuefc, "primary_state", "TEXT", "", "", 50)
+    arcpy.AddField_management(queuefc, "export_format","TEXT", "", "", 20)
+    arcpy.AddField_management(queuefc, "contour_smooting", "TEXT", "", "", 20)
+    arcpy.AddField_management(queuefc, "layers_removed", "TEXT", "", "", 1000)
+    arcpy.AddField_management(queuefc, "extent", "TEXT", "", "", 20)
+    arcpy.AddField_management(queuefc, "submit_date", "DATE")
+    arcpy.AddField_management(queuefc, "complete_date", "DATE")
+    arcpy.AddField_management(queuefc, "status", "SHORT")
+    arcpy.AddField_management(queuefc, "signed_url", "TEXT", "", "", 1000)
+    arcpy.AddField_management(queuefc, "url_expiration", "DATE")
+
+    esri_cursor = arcpy.da.InsertCursor(queuefc, ['map_id', 'order_id', 'user_email', 'map_type', 'cell_id', 'map_sheet_name', 'primary_state', 'export_format', 'contour_smooting', 'layers_removed', 'extent','submit_date', 'complete_date','status', 'signed_url', 'url_expiration', 'SHAPE@'])
+
+
+    for req in request_list:
+        esri_cursor.insertRow(req)
+    del esri_cursor
+
+    WriteLog ('done '+ str(round(time.time()-start,2)))
+    print('over')
+
+
+perform_initial_table_create()
