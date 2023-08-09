@@ -1,0 +1,198 @@
+import json
+import boto3
+import ssl
+import time
+import datetime
+import psycopg2
+from urllib.parse import urlencode, quote_plus
+import http.client
+
+
+
+def lambda_handler(event, context):
+    
+    entry_dict = {}
+    
+    db_conn_tuple = establishDatabaseConnection()
+    conn = db_conn_tuple[0]
+    cur = db_conn_tuple[1]
+    dateNow = establishNow(conn,cur)
+    fetch_stamp = dateNow
+    entry_dict['fetch_stamp'] = fetch_stamp
+    trim_old_sql = """delete from sample_logs where fetch_stamp < NOW() - INTERVAL'7 days'"""
+    cur.execute(trim_old_sql)
+    conn.commit()
+    
+    
+    #host_name, fetch_stamp, job_id, job_status
+    
+    
+    
+    
+    username = "$$$$"
+    password = "$$$$"
+    #db_connection_response = establishDatabaseConnection()
+    #cur = db_connection_response[1]     #selects the second of two response objects from db_connection_response, which is cur
+
+    host_name_list_tuples = getHostnames(cur)  #host_name_list comes from fetchall so it is a list of tuples
+    host_name_list_actual = []
+    for lists in host_name_list_tuples:
+        server_name = str(lists[0]) + ".$$$.net"
+        server_host_name = lists[0]
+        token = getToken(username,password,server_name,443)
+        
+        jobs = getListofJobs(server_name, 443, token)
+        
+        results = jobs['results']
+        local_dict = {}
+        local_dict['fetch_stamp'] = fetch_stamp
+        local_dict['host_name'] = server_host_name
+        for res in results:
+            
+            #print(res)
+            #print(type(res))
+            key_list = res.keys()
+            for item in key_list:
+                local_dict['job_id'] = item
+                job_status_str = res[item]
+                local_dict['job_status'] = job_status_str
+                postgres_host_name = local_dict.get('host_name')
+                postgres_fetch_stamp = local_dict.get('fetch_stamp')
+                postgres_job_id = local_dict.get('job_id')
+                postgres_job_status = local_dict.get('job_status')
+                sql_insert_string = f"""insert into $$$$_logs(host_name, fetch_stamp, job_id, job_status) values ('{postgres_host_name}', '{postgres_fetch_stamp}', '{postgres_job_id}', '{postgres_job_status}')                if postgres_job_status != "esriJobExecuting":
+                cur.execute(sql_insert_string)
+                conn.commit() 
+                
+                
+                
+             
+        
+
+    
+    conn.close()
+    return {
+    'statusCode': 200,
+    'body': json.dumps('return connection')
+    }
+
+
+def establishDatabaseConnection():
+    #establishes secret manager connection, pulls down metrics db creds, logs into database, and returns conn and cur objects
+        
+    secret_name = "$$$$$$"
+    region_name = "$$$$$"    
+    session = boto3.session.Session()
+    client = session.client(service_name='secretsmanager', region_name=region_name)    
+    get_secret_value_response = client.get_secret_value(SecretId = secret_name)
+    secret = get_secret_value_response['SecretString']
+    secrets_dict = get_secret_value_response
+    secrets_dict = json.loads(secret)
+    
+    metrics_database = secrets_dict.get('$$$$')
+    metrics_user = secrets_dict.get('$$$$')
+    metrics_password = secrets_dict.get('$$$$')
+    metrics_host = secrets_dict.get('$$$$')
+    metrics_port = secrets_dict.get('$$$$')
+    #pulls in secret values for db log in
+    
+    conn = psycopg2.connect(database=metrics_database, user=metrics_user, password=metrics_password,host=metrics_host, port=metrics_port)   
+    cur = conn.cursor()
+    #signs in to the database that holds the tables used to metrics storage and establishes the connection cursor
+
+    return conn,cur
+
+def getHostnames(cur):
+    #reach into t_server and get active server list of hostnames
+    
+    sql ="""with cte_1 as(select a.* from $$$$$ a where a.environment = 'prod' or a.environment = 'stage') select b.host_name from cte_1 b where b.machine_name = '$$$$' or b.machine_name = '$$$$'"""
+
+    #establish establish sql string for $$$$ get host names
+    
+    cur.execute(sql)
+    host_name_list = cur.fetchall()    
+    return host_name_list
+    
+
+def getToken(username, password, serverName, serverPort):
+    
+    ssl._create_default_https_context = ssl._create_unverified_context
+    print("#### Generating Token on: " + serverName)
+    tokenURL = "/server/admin/generateToken"
+    # URL-encode the token parameters
+    paramsOrig = {'username': username, 'password': password, 'client': 'requestip', 'f': 'json'}
+    
+    params = urlencode(paramsOrig, quote_via=quote_plus)
+    headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
+    # Connect to URL and post parameters
+    
+    httpConn = http.client.HTTPSConnection(serverName, serverPort)
+    print("#### getToken made a connection")
+    httpConn.request("POST", tokenURL, params, headers)
+    
+    # Read response
+    response = httpConn.getresponse()
+    if (response.status != 200):
+        httpConn.close()
+        print ("#### Error while fetching tokens from admin URL. Please check the URL and try again.")
+        return "Error"
+    else:
+        data = response.read()
+        httpConn.close()
+        
+        # Check that data returned is not an error object
+        if not assertJsonSuccess(data):
+            print("#### Could not assertJsonSuccess")
+            return "Error"
+        
+        # Extract the token from it
+        token = json.loads(data) 
+        return token["token"]
+
+
+def getListofJobs(serverName, serverPort, inToken):
+    ssl._create_default_https_context = ssl._create_unverified_context
+    jobsURL = "/server/admin/services/POD/Gateway.GPServer/jobs/query?number=10000"
+    # URL-encode the token parameters
+    
+    paramsOrig = {'token': inToken, 'f': 'json'}
+   
+    params = urlencode(paramsOrig, quote_via=quote_plus)
+    headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
+    # Connect to URL and post parameters
+    
+    httpConn = http.client.HTTPSConnection(serverName, serverPort)
+    httpConn.request("POST", jobsURL, params, headers)
+    
+    # Read response
+    response = httpConn.getresponse()
+    if (response.status != 200):
+        httpConn.close()
+        print ("#### Error while fetching jobs from admin URL. Please check the URL and try again.")
+        return
+    else:
+        data = response.read()
+        httpConn.close()
+        # Check that data returned is not an error object
+        if not assertJsonSuccess(data): 
+            print ("#### Assert JSON failed")
+            return
+        # Extract the token from it
+        jobDict = json.loads(data)
+        return jobDict 
+
+def assertJsonSuccess(data):
+    obj = json.loads(data)
+    if 'status' in obj and obj['status'] == "error":
+        print ("#### Error: JSON object returns an error. " + str(obj))
+        return False
+    else:
+        return True
+    
+def establishNow(conn,cur):
+    sqlNow = """select now()"""
+    cur.execute(sqlNow)
+    dateTimeNow = cur.fetchone()
+    dateTimeNow = dateTimeNow[0]
+    return dateTimeNow
+    
