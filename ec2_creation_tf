@@ -1,0 +1,67 @@
+data "aws_ami" "ami_devbox" {
+    most_recent = true 
+    owners = [$$$$, $$$$]
+  filter {
+    name   = "tag:$$$$"
+    values = ["Current"] ## Ensure this AMI version tag exists
+  }
+   filter {
+    name   = "tag:$$$$"
+    values = ["devbox-$$$$-*"]
+  }
+}
+
+
+data "template_file" "ud_devbox" {
+  template = "${file("${path.module}/templates/gitlab_application_user_data.tpl")}"
+}
+
+
+resource "aws_instance" "$$$$" {
+    ami = "${data.aws_ami.ami_devbox.id}"
+    instance_type = "c5.xlarge"
+    subnet_id = "subnet-$$$$"
+    vpc_security_group_ids = ["$$$$"]
+    iam_instance_profile = "csr-Ec2-Role"
+    user_data = "${data.template_file.ud_devbox.rendered}"
+    root_block_device {
+      volume_size = 150
+      volume_type = "standard"
+    }
+    tags = {
+      Name = "dynamap-$$$$"
+      program = "dynamap"
+      system = "$$$$"
+      poc = "$$$$@usgs.gov"
+      teams = "$$$$"
+      environment = "$$$$"
+    }
+    volume_tags = {
+      Name = "dynamap-$$$$"
+      program = "$$$$"
+      system = "$$$$"
+      poc = "$$$$$.gov"
+      teams = "$$$$"
+      environment = "$$$$"
+    }
+}
+
+
+resource "aws_ebs_volume" "DDrive" {
+ availability_zone = "$$$$"
+ size = 50
+ tags = {
+      Name = "dynamap-$$$$"
+      program = "$$$$"
+      system = "$$$$"
+      poc = "$$$$@usgs.gov"
+      teams = "$$$$"
+      environment = "$$$$"
+   }
+}
+
+resource "aws_volume_attachment" "ebs_att" {
+ device_name = "/dev/sdh"
+ volume_id   = aws_ebs_volume.DDrive.id
+ instance_id = aws_instance.dev_ec2.id
+}
