@@ -2,29 +2,73 @@ import psycopg2
 from collections import Counter
 import datetime
 import time
-import operator
+import socket
 import json
 import arcpy
 import os
 import re
+import boto3
+import ssl
+from urllib import urlencode
+import http.client    
+import urllib2
+import urllib
 
 
-##File Description
-### The purpose of this file is to perform the etl operation required for the so-dubbed 'spatial metrics dashboard'. This dashboard will provide
-#valuable spatial insight into the delivery of TopoBuilder Products.
-### dev_etl.py performs the extraction from the ##### and ########## tables. It creates the output feature_class: #############; and the flat
-# tables ########### and #############.The file also creates a .sd file of these data and uploads to ARCSERVER.
-start = time.time()
+###################################################################
+### Spatial dash daily task stored in S3 /automation_resources/queue_etl/spatial_dash_daily_task.zip
+### Scheduled task pulls in script and runs it to populate server with mapservice
+###################################################################
 
 
-#### Function Definitions ####
+###################
+# Define Functions
+###################
+
+def getToken(username, password, serverName, serverPort):    
+    ssl._create_default_https_context = ssl._create_unverified_context    
+    tokenURL = "/server/admin/generateToken"
+    # URL-encode the token parameters
+    paramsOrig = {'username': username, 'password': password, 'client': 'requestip', 'f': 'json'}    
+    params = urlencode(paramsOrig)
+    headers = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain"}
+    # Connect to URL and post parameters    
+    httpConn = http.client.HTTPSConnection(serverName, serverPort)
+    #print("#### getToken made a connection")
+    httpConn.request("POST", tokenURL, params, headers)    
+    # Read response
+    response = httpConn.getresponse()
+    if (response.status != 200):
+        httpConn.close()
+        #print ("#### Error while fetching tokens from admin URL. Please check the URL and try again.")
+        return "Error"
+    else:
+        data = response.read()
+        httpConn.close()        
+        # Extract the token from it
+        token = json.loads(data) 
+        return token["token"]
+
+
+def deleteservice(server, servicename, username, password, token=None, port=6080):
+    #url = "https://igsaws911f8be86.gs.doi.net/server/admin/services/requests_data.MapServer/delete"
+    url = "https://localhost/server/admin/services/$$$$$$$$$$$"
+    token = getToken( username, password, '$$$$$$$$$$$$$$$$.net', 443)
+    values = {'token':token,
+            'f':'json'}
+
+    data = urllib.urlencode(values)
+    req = urllib2.Request(url, data)
+    response = urllib2.urlopen(req)
+    the_page = response.read()
+    #print(the_page)
+
 
 def ExtractData(pg_sql):
-    host_conn = "##################.gov"
-    database_conn = "#######"
-    username_conn = "#######"
-    password_conn = "###############"
-
+    host_conn = "$$$$$$$$$$$$$.gov"
+    database_conn = "$$$$$$$$$"
+    username_conn = "$$$$$$$$$$_user"
+    password_conn = "$$$$$$$$$$$$$"
     pg_conn = psycopg2.connect(host=host_conn,database=database_conn,user=username_conn,password=password_conn)
     pg_cursor = pg_conn.cursor()
     pg_cursor.execute(pg_sql)
@@ -33,82 +77,116 @@ def ExtractData(pg_sql):
     pg_conn.close()
     return db_result
 
+
 def WriteLog (msg):
     print (msg)
 
+
+def replace_state():    
+    sde_path_string = 'C:/$$$$$/$$$$$.sde'
+    arcpy.env.workspace = sde_path_string
+    out_path_string = "C:/$$$$$/$$$$$$_3857"
+    arcpy.Project_management(in_dataset="C:/$$$$$$$$$$$$$$$$$$/$$$$$$$$/$$$$$$$$$", out_dataset="C:/$$$$$$$$$$$$$$$$$$/$$$$$$$$/$$$$$$$$$", out_coor_system="PROJCS['WGS_1984_Web_Mercator_Auxiliary_Sphere',GEOGCS['GCS_WGS_1984',DATUM['D_WGS_1984',SPHEROID['WGS_1984',6378137.0,298.257223563]],PRIMEM['Greenwich',0.0],UNIT['Degree',0.0174532925199433]],PROJECTION['Mercator_Auxiliary_Sphere'],PARAMETER['False_Easting',0.0],PARAMETER['False_Northing',0.0],PARAMETER['Central_Meridian',0.0],PARAMETER['Standard_Parallel_1',0.0],PARAMETER['Auxiliary_Sphere_Type',0.0],UNIT['Meter',1.0]]", transform_method="WGS_1984_(ITRF00)_To_NAD_1983", in_coor_system="GEOGCS['GCS_North_American_1983',DATUM['D_North_American_1983',SPHEROID['GRS_1980',6378137.0,298.257222101]],PRIMEM['Greenwich',0.0],UNIT['Degree',0.0174532925199433]]", preserve_shape="NO_PRESERVE_SHAPE", max_deviation="", vertical="NO_VERTICAL")
+    
+    arcpy.DeleteField_management(in_table="C:/$$$$$$$$$$$$$$$$$$/$$$$$$$$/$$$$$$$$$", drop_field="permanent_identifier;source_featureid;source_datasetid;source_datadesc;source_originator;data_security;distribution_policy;loaddate;fcode;state_fipscode;population;areasqkm;gnis_id;gnis_name;globalid")
+    
+    
+    arcpy.SpatialJoin_analysis(target_features="C:/a$$$$$$$/current_data", join_features="C:/$$$$$$$/$$$$$$$$$$$.gdb/states_3857", out_feature_class="C:/$$$$$/$$$.gdb/state_closest", join_operation="JOIN_ONE_TO_ONE", join_type="KEEP_ALL", field_mapping='Shape_Length "Shape_Length" false true true 8 Double 0 0 ,First,#,C:/$$$$$$$$,Shape_Length,-1,-1;Shape_Area "Shape_Area" false true true 8 Double 0 0 ,First,#,C:/$$$$$$$$,Shape_Area,-1,-1;map_id "map_id" true true false 255 Text 0 0 ,First,#,C:/$$$$$$$$,map_id,-1,-1;order_id "order_id" true true false 255 Text 0 0 ,First,#,C:/$$$$$$$$,order_id,-1,-1;user_email "user_email" true true false 150 Text 0 0 ,First,#,C:/$$$$$$$$,user_email,-1,-1;map_type "map_type" true true false 50 Text 0 0 ,First,#,C:/$$$$$$$$,map_type,-1,-1;cell_id "cell_id" true true false 4 Long 0 0 ,First,#,C:/$$$$$$$$,cell_id,-1,-1;map_sheet_name "map_sheet_name" true true false 50 Text 0 0 ,First,#,C:/$$$$$$$$,map_sheet_name,-1,-1;primary_state "primary_state" true true false 50 Text 0 0 ,First,#,C:/$$$$$$$$,primary_state,-1,-1;export_format "export_format" true true false 20 Text 0 0 ,First,#,C:/$$$$$$$$,export_format,-1,-1;contour_smoothing "contour_smoothing" true true false 20 Text 0 0 ,First,#,C:/$$$$$$$$,contour_smoothing,-1,-1;layers_removed "layers_removed" true true false 1000 Text 0 0 ,First,#,C:/$$$$$$$$,layers_removed,-1,-1;extent "extent" true true false 20 Text 0 0 ,First,#,C:/$$$$$$$$,extent,-1,-1;submit_date "submit_date" true true false 8 Date 0 0 ,First,#,C:/$$$$$$$$,submit_date,-1,-1;complete_date "complete_date" true true false 8 Date 0 0 ,First,#,C:/$$$$$$$$,complete_date,-1,-1;status "status" true true false 2 Short 0 0 ,First,#,C:/$$$$$$$$,status,-1,-1;signed_url "signed_url" true true false 1000 Text 0 0 ,First,#,C:/$$$$$$$$,signed_url,-1,-1;url_expiration "url_expiration" true true false 8 Date 0 0 ,First,#,C:/$$$$$$$$,url_expiration,-1,-1;state_closest "state_closest" true true false 120 Text 0 0 ,First,#,C:/agol_dash/custom_spatial_gdb.gdb/states_3857,state_name,-1,-1', match_option="CLOSEST", search_radius="", distance_field_name="")
+    
+
+    arcpy.DeleteField_management(in_table="C:/$$$$", drop_field="Join_Count;TARGET_FID;primary_state;status;complete_date;url_expiration")
+
+
 def create_table(environment):
-    select_sql = "SELECT map_id, order_id::text, email, map_type, cell_id, map_sheet_name, primary_state, export_format, contour_smoothing, layers_removed, product_json, aoi_geometry"
-    from_sql = "#####################" + str(environment)
-    all_data_sql = select_sql + " " + from_sql
-    all_data = ExtractData(all_data_sql)
-    request_list = []
+
+
+
+    select_sql = "SELECT mp.map_id, mp.order_id::text, mp.email, mp.map_type, mp.cell_id, mp.map_sheet_name, mp.primary_state, mp.export_format, mp.contour_smoothing, mp.layers_removed, mp.product_json, mp.aoi_geometry, msp.map_status, dsp.signed_url, msp.job_started, msp.job_completed FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY map_id ORDER BY job_completed DESC) AS rn FROM $$$$$$$$$$$$$$$$$$ ) msp JOIN dynamap.$$$$$$$$$$$$ dsp ON substring(msp.map_id,1,36) = dsp.map_id JOIN $$$$$$$$$$$$$$$ ON substring(msp.map_id,1,36) = mp.map_id WHERE msp.rn = 1"
+
+    
+
+    all_data = ExtractData(select_sql)
    
+    request_list = []
+    x = int(0)
     for i in all_data:
-        map_id = i[0] if i[0] else None
-        order_id = i[1] if i[1] else None        
-        user_email = i[2] if i[2] else None
-        map_type = i[3] if i[3] else None
-        cell_id = i[4] if i[4] else None
+        
+        ind = 0
+        var0 = i[0]
+        var1 = i[1]
+        var2 = i[2]
+        var3 = i[3]
+        var4 = i[4]
+        var5 = i[5]
+        var6 = i[6]
+        var7 = i[7]
+        var8 = i[8]
+        var9 = i[9]
+        var10 = i[10]
+        var11 = i[11]
+        var12 = i[12]
+        var13 = i[13]
+        var14 = i[14]
+        var15 = i[15]
+     
+   
+    
+        
+        x = x+1
+        replace_str = 'user' + str(x) + '@'
+        map_id = var0 if var0 else None
+        order_id = var1 if var1 else None        
+        user_email = var2 if var2 else None
+        if user_email != None:
+            replace_value = re.sub(r'(.*)@', replace_str, user_email)
+            user_email = replace_value
+        map_type = var3 if var3 else None
+        cell_id = var4 if var4 else None
         str_cell_id = cell_id
         str_cell_id = str(str_cell_id)
         if re.match("^-99", str_cell_id):
             cell_id = None
-
         if cell_id < 0:
             extent = 'Off-Grid Extent'
-
         if cell_id > 0:
             extent = 'Standard Extent'
-
-        map_sheet_name = i[5] if i[5] else None
-        primary_state = i[6] if i[6] else None
-        export_format = i[7] if i[7] else None
+        map_sheet_name = var5 if var5 else None
+        primary_state = var6 if var6 else None
+        export_format = var7 if var7 else None
         if export_format == 'Production PDF':
             export_format = 'Geospatial PDF'
-
-        contour_smoothing = i[8] if i[8] else None
-        aoi_geometry = i[11] if i[11] else None
-
-        if not i[9]:
+        contour_smoothing = var8 if var8 else None
+        layers_removed = var9 if var9 else None
+        
+        if not var9:
             layers_removed = None
         else:
-            layers_removed = i[9]
+            layers_removed = var9
             string = ""
-            for i in range(len(layers_removed)):
-                if i == len(layers_removed) - 1:
-                    string += str(layers_removed[i])
+            for b in range(len(layers_removed)):
+                if b == len(layers_removed) - 1:
+                    string += str(layers_removed[b])
                 else:
-                    string += str(layers_removed[i]) + ", "
+                    string += str(layers_removed[b]) + ", "
 
             layers_removed = string
 
-        sql_2 = 'SELECT map_id, job_started, job_completed, map_status FROM ################### where map_id = ' + "'" + map_id + "'"
-        date_data = ExtractData(sql_2)
-        
-        if not date_data:
-            submit_date = None
-            complete_date = None
-            status = None
-        else:
-            submit_date = date_data[0][1]
-            complete_date = date_data[0][2]
-            status = date_data[0][3]
-        
-        sql_3 = 'SELECT map_id, signed_url FROM dynamap.delivery_status_stage where map_id = ' + "'" + map_id + "'"
-        signed_data = ExtractData(sql_3)
+        aoi_geometry = var11 if var11 else None
+        status = var12 if var12 else None
+        print(status)
+        signed_url = var13 if var13 else None
+        submit_date = var14 if var14 else None
+        complete_date = var15 if var15 else None
 
-        if not signed_data:
-            signed_url = None
-        else:
-            signed_url = signed_data[0][1]
 
         if status == 2:
             signed_url = signed_url
             url_expiration = complete_date + datetime.timedelta(days = 60)
-        if status != 2:
-            signed_url = None
-            url_expiration = None
-
+            if status != 2:
+                signed_url = None
+                url_expiration = None
+ 
+   
         boundingbox = aoi_geometry['rings'][0]        
         arrayList = []
         for coordpair in boundingbox:
@@ -116,18 +194,9 @@ def create_table(environment):
         pointArray = arcpy.Array(arrayList)
         polygon = arcpy.Polygon(pointArray)    
         request_list.append([map_id, order_id, user_email, map_type, cell_id, map_sheet_name, primary_state, export_format, contour_smoothing, layers_removed, extent, submit_date, complete_date, status, signed_url, url_expiration, polygon])
+    #print(request_list)
     return request_list
 
-request_list = create_table('stage')
-outDir = r"C:\##########"
-gdb_name = "###########.gdb"
-queuefc_name = '###########'
-queuefc = os.path.join(outDir, gdb_name, queuefc_name)
-
-
-if arcpy.Exists(os.path.join(outDir, gdb_name)):
-    arcpy.Delete_management(os.path.join(outDir, gdb_name))
-arcpy.CreateFileGDB_management(outDir, gdb_name)
 
 def perform_initial_table_create():
     arcpy.CreateFeatureclass_management(os.path.join(outDir, gdb_name), queuefc_name, "Polygon", "", "", "", arcpy.SpatialReference(3857))
@@ -139,7 +208,7 @@ def perform_initial_table_create():
     arcpy.AddField_management(queuefc, "map_sheet_name", "TEXT", "", "", 50)
     arcpy.AddField_management(queuefc, "primary_state", "TEXT", "", "", 50)
     arcpy.AddField_management(queuefc, "export_format","TEXT", "", "", 20)
-    arcpy.AddField_management(queuefc, "contour_smooting", "TEXT", "", "", 20)
+    arcpy.AddField_management(queuefc, "contour_smoothing", "TEXT", "", "", 20)
     arcpy.AddField_management(queuefc, "layers_removed", "TEXT", "", "", 1000)
     arcpy.AddField_management(queuefc, "extent", "TEXT", "", "", 20)
     arcpy.AddField_management(queuefc, "submit_date", "DATE")
@@ -147,16 +216,144 @@ def perform_initial_table_create():
     arcpy.AddField_management(queuefc, "status", "SHORT")
     arcpy.AddField_management(queuefc, "signed_url", "TEXT", "", "", 1000)
     arcpy.AddField_management(queuefc, "url_expiration", "DATE")
-
-    esri_cursor = arcpy.da.InsertCursor(queuefc, ['map_id', 'order_id', 'user_email', 'map_type', 'cell_id', 'map_sheet_name', 'primary_state', 'export_format', 'contour_smooting', 'layers_removed', 'extent','submit_date', 'complete_date','status', 'signed_url', 'url_expiration', 'SHAPE@'])
-
-
+    esri_cursor = arcpy.da.InsertCursor(queuefc, ['map_id', 'order_id', 'user_email', 'map_type', 'cell_id', 'map_sheet_name', 'primary_state', 'export_format', 'contour_smoothing', 'layers_removed', 'extent','submit_date', 'complete_date','status', 'signed_url', 'url_expiration', 'SHAPE@'])
     for req in request_list:
         esri_cursor.insertRow(req)
     del esri_cursor
-
     WriteLog ('done '+ str(round(time.time()-start,2)))
     print('over')
 
 
+def perform_email_table_create():
+    arcpy.CreateTable_management(os.path.join(outDir, gdb_name), queuefc_name)
+    arcpy.AddField_management(queuefc, "email_domain", "TEXT", "", "", 75) 
+    arcpy.AddField_management(queuefc, "count", "LONG")
+    esri_cursor = arcpy.da.InsertCursor(queuefc, ['email_domain', 'count'])
+    for req in request_list2:
+        esri_cursor.insertRow(req)
+    del esri_cursor
+
+
+def create_flat_table():
+    select_sql = """select email_domain, count(*) from (select email, substring(LOWER(email) from '@(.*)') as email_domain from $$$$$$$$) as email_domain_count group by email_domain"""
+    all_data = ExtractData(select_sql)
+    request_list2 = []   
+    for i in all_data:
+        email_domain = i[0] if i[0] else None
+        count = i[1] if i[1] else None
+        request_list2.append([email_domain, count])
+    return request_list2
+
+
+def delMXD_layers(mxd_file_path):
+    mxd = arcpy.mapping.MapDocument(mxd_file_path)
+    df = arcpy.mapping.ListDataFrames(mxd, "Layers")[0]
+    for lyr in arcpy.mapping.ListLayers(mxd, "", df):
+        arcpy.mapping.RemoveLayer(df, lyr)
+    mxd.save()
+    del mxd
+
+
+def listMXD_layers(mxd_file_path):
+    mxd = arcpy.mapping.MapDocument(mxd_file_path)
+    layer_list = arcpy.mapping.ListLayers(mxd)
+    
+    return layer_list
+
+def addMXD_layers(mxd_file_path):
+    
+    mxd = arcpy.mapping.MapDocument(mxd_file_path)
+    df = arcpy.mapping.ListDataFrames(mxd, "Layers")[0]
+    addLayer = arcpy.mapping.Layer(r"C:\$$$$/$$$$")
+    arcpy.mapping.AddLayer(df, addLayer, "BOTTOM")
+
+
+
+    mxd.save()
+    del mxd
+
+def changeMXD_sddraft(mxd_file_path, service_name, sddraft):
+    mapDoc = arcpy.mapping.MapDocument(mxd_file_path)
+    arcpy.mapping.CreateMapSDDraft(mapDoc, sddraft, service_name, 'ARCGIS_SERVER')
+    
+    
+def changeSDDRAFT_sd(sddraft):
+    in_service = sddraft
+    try:
+        os.remove('C:/$$$$$$.sd')
+    except:
+        print("sd did not previously exist")
+    out_server = 'C:/$$$$$$.sd'
+    arcpy.server.StageService(in_service, out_server)
+
+def createAGS_file(local_hostname):
+    
+    arcpy.mapping.CreateGISServerConnectionFile (connection_type = 'PUBLISH_GIS_SERVICES', out_folder_path = 'C:/agol_dash/', out_name = 'spatial_server.ags', server_url = 'https://' + 'localhost' + '/server/rest/services', server_type = 'ARCGIS_SERVER', use_arcgis_desktop_staging_folder = False, staging_folder_path = "C:/$$$$$$", username = '$$$$$$', password = '$$$$$$')
+
+
+def uploadSD_file():
+    
+    arcpy.UploadServiceDefinition_server(in_sd_file="C:/agol_dash/requests_data.sd", in_server="C:/$$$$$$.ags", in_service_name="", in_cluster="", in_folder_type="FROM_SERVICE_DEFINITION", in_folder="", in_startupType="STARTED", in_override="OVERRIDE_DEFINITION", in_my_contents="NO_SHARE_ONLINE", in_public="PRIVATE", in_organization="NO_SHARE_ORGANIZATION", in_groups="")
+
+
+start = time.time()
+local_hostname = socket.gethostname()
+local_ip = socket.gethostbyname(local_hostname)
+
+
+
+
+request_list = create_table('$$$$$')
+outDir = r"C:\$$$$$"
+gdb_name = "$$$$.gdb"
+queuefc_name = '$$$$$$'
+queuefc = os.path.join(outDir, gdb_name, queuefc_name)
+
+if arcpy.Exists(os.path.join(outDir, gdb_name)):
+    
+    deleteservice("localhost", "requests_data", "$$$$$$", "$$$$$$")
+    
+    arcpy.Delete_management(os.path.join(outDir, gdb_name))
+    
+arcpy.CreateFileGDB_management(outDir, gdb_name)
+
 perform_initial_table_create()
+
+
+request_list2 = create_flat_table()
+outDir = r"C:/$$$$"
+gdb_name = "$$$$$$.gdb"
+queuefc_name = '$$$$$$'
+queuefc = os.path.join(outDir, gdb_name, queuefc_name)
+
+
+perform_email_table_create()
+replace_state()
+
+
+#### Define Inputs ####
+mxd_file_path = r"C:\$$$$$$$.mxd"
+sddraft = 'C:/$$$$/' + '$$$$' + '.sddraft'
+service_name = '$$$$$'
+
+
+#### Execution Code ####
+
+try:
+    delMXD_layers(mxd_file_path)
+    addMXD_layers(mxd_file_path)
+    changeMXD_sddraft(mxd_file_path, service_name, sddraft)
+    changeSDDRAFT_sd(sddraft)
+    try:
+        createAGS_file(local_hostname)
+    except IOError as e:
+        print("AGS file present:", e)
+    uploadSD_file()
+
+except IOError as e:
+    print("An error occurred:", e)
+
+
+
+
+
